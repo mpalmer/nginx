@@ -37,7 +37,7 @@ typedef struct {
 
     ngx_str_t                       ciphers;
 
-    ngx_shm_zone_t                 *shm_zone;
+    ngx_ssl_session_cache_cfg_t     ext_session_cache;
 
     u_char                         *file;
     ngx_uint_t                      line;

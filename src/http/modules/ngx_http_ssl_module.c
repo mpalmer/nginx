@@ -476,13 +476,14 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->builtin_session_cache,
                          prev->builtin_session_cache, NGX_SSL_NONE_SCACHE);
 
-    if (conf->shm_zone == NULL) {
-        conf->shm_zone = prev->shm_zone;
+    if (conf->ext_session_cache.shm_zone == NULL) {
+        conf->ext_session_cache.shm_zone = prev->ext_session_cache.shm_zone;
     }
 
     if (ngx_ssl_session_cache(&conf->ssl, &ngx_http_ssl_sess_id_ctx,
                               conf->builtin_session_cache,
-                              conf->shm_zone, conf->session_timeout)
+                              &conf->ext_session_cache,
+                              conf->session_timeout)
         != NGX_OK)
     {
         return NGX_CONF_ERROR;
@@ -596,9 +597,10 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                 return NGX_CONF_ERROR;
             }
 
-            sscf->shm_zone = ngx_shared_memory_add(cf, &name, n,
-                                                   &ngx_http_ssl_module);
-            if (sscf->shm_zone == NULL) {
+            sscf->ext_session_cache.shm_zone =
+                    ngx_shared_memory_add(cf, &name, n,
+                                          &ngx_http_ssl_module);
+            if (sscf->ext_session_cache.shm_zone == NULL) {
                 return NGX_CONF_ERROR;
             }
 
@@ -608,7 +610,7 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         goto invalid;
     }
 
-    if (sscf->shm_zone && sscf->builtin_session_cache == NGX_CONF_UNSET) {
+    if (sscf->ext_session_cache.shm_zone && sscf->builtin_session_cache == NGX_CONF_UNSET) {
         sscf->builtin_session_cache = NGX_SSL_NO_BUILTIN_SCACHE;
     }
 
