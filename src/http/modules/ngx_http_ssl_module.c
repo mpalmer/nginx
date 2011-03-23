@@ -8,7 +8,6 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-
 typedef ngx_int_t (*ngx_ssl_variable_handler_pt)(ngx_connection_t *c,
     ngx_pool_t *pool, ngx_str_t *s);
 
@@ -689,7 +688,9 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         goto invalid;
     }
 
-    if (sscf->ext_session_cache.shm_zone && sscf->builtin_session_cache == NGX_CONF_UNSET) {
+    if ((sscf->ext_session_cache.shm_zone
+         || sscf->ext_session_cache.memcache_name.len > 0)
+        && sscf->builtin_session_cache == NGX_CONF_UNSET) {
         sscf->builtin_session_cache = NGX_SSL_NO_BUILTIN_SCACHE;
     }
 
