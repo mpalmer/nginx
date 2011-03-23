@@ -113,6 +113,10 @@ PCRE_OPT=
 USE_OPENSSL=NO
 OPENSSL=NONE
 
+MEMCACHE_SSL_SESSION_STORE=NO
+USE_LIBMEMCACHE=NO
+LIBMEMCACHE=NONE
+
 USE_MD5=NO
 MD5=NONE
 MD5_OPT=
@@ -181,6 +185,8 @@ do
 
         --with-file-aio)                 NGX_FILE_AIO=YES           ;;
         --with-ipv6)                     NGX_IPV6=YES               ;;
+
+        --with-memcache-ssl-session-store) MEMCACHE_SSL_SESSION_STORE=YES ;;
 
         --without-http)                  HTTP=NO                    ;;
         --without-http-cache)            HTTP_CACHE=NO              ;;
@@ -326,6 +332,8 @@ cat << END
 
   --with-file-aio                    enable file aio support
   --with-ipv6                        enable ipv6 support
+
+  --with-memcache-ssl-session-store  enable memcache storage of SSL sessions
 
   --with-http_ssl_module             enable ngx_http_ssl_module
   --with-http_realip_module          enable ngx_http_realip_module

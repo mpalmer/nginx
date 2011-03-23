@@ -1,18 +1,33 @@
 This is a patched version of nginx, intended to allow the use of memcached
-as an SSL session cache store.  It's use is simple; in addition to the
-existing options for ssl_session_cache (builtin:<size> and
-shared:<name>:<size>), this patch adds support for
-the form "memcached:<name>[:<host>[:port]]", where <name> is a prefix that
-will be applied to all SSL session IDs in the memcached store, <host> is the
-hostname of the memcached server (default is localhost), and <port> is the
-port of the memcached server (default is 11211).
+as an SSL session cache store.  It's use is simple:
 
-Once you've done that, you should be able to see <name>:<sessionID> keys in
-the memcached store corresponding to all of the cached SSL sessions.  Usual
-memcached practices apply.
+* Install the libmemcache (*not* libmemcached) library, including
+  development headers and symlinks, to somewhere system-reachable
 
-One note of caution: memcached's internal key expiry mechanism will be used
-to expire SSL sessions, using the value of ssl_session_timeout to set the
-expiry time.  This is usually fine, but if you don't see your session IDs in
-there, make sure that you're not waiting too long to look for them.
+* Configure/build/install nginx with the --with-memcache-ssl-session-store
+  option
 
+* Set "ssl_session_cache memcached:<name>[:<host>[:<port>]]" in your nginx
+  config and reload the config
+
+<name> is a prefix that will be applied to all SSL session IDs in the
+memcached store, <host> is the hostname of the memcached server (default is
+localhost), and <port> is the port of the memcached server (default is
+11211).
+
+If nginx complains that memcached: is an invalid configuration value, you're
+not running an appropriately built nginx.  Re-check your configuration, make
+sure that MEMCACHE_SSL_SESSION_STORE is #defined in objs/ngx_auto_config.h,
+and triple check that you've installed the rebuilt nginx.
+
+Once you've done that, you should be able to load up SSL pages in your web
+browser and see <name>:<sessionID> keys in the memcached store corresponding
+to each of your cached SSL sessions.  If you'd like to verify that the
+sessions are being cached (by *something*, at least) use gnutls-cli -r -V
+<webserver> | grep 'Session ID' and see that all three lines are the same.
+
+SSL session expiry will be enforced using the value of the
+ssl_session_timeout nginx config variable (default is 5m), applied using
+memcached's internal key expiry mechanism.  This should be fine in
+production, but if you're looking for your session IDs in memcached and
+don't see them, make sure that you're not waiting too long to look for them.

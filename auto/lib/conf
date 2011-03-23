@@ -24,6 +24,10 @@ if [ $USE_OPENSSL = YES ]; then
     . auto/lib/openssl/conf
 fi
 
+if [ $USE_LIBMEMCACHE = YES ]; then
+    . auto/lib/libmemcache/conf
+fi
+
 if [ $USE_MD5 = YES ]; then
 
     if [ $USE_OPENSSL = YES ]; then
