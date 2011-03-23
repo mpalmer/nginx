@@ -315,7 +315,10 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t *cf)
      *     sscf->client_certificate = { 0, NULL };
      *     sscf->crl = { 0, NULL };
      *     sscf->ciphers = { 0, NULL };
-     *     sscf->shm_zone = NULL;
+     *     sscf->ext_session_cache.shm_zone = NULL;
+     *     sscf->ext_session_cache.memcache_name = { 0, NULL };
+     *     sscf->ext_session_cache.memcache_host = { 0, NULL };
+     *     sscf->ext_session_cache.memcache_port = 0;
      */
 
     sscf->enable = NGX_CONF_UNSET;
@@ -479,6 +482,16 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
     if (conf->ext_session_cache.shm_zone == NULL) {
         conf->ext_session_cache.shm_zone = prev->ext_session_cache.shm_zone;
     }
+    
+    if (conf->ext_session_cache.memcache_name.len == 0) {
+        /* None of these can have been set without memcache_name being set to
+         * something, and if memcache_name has been set to something, then
+         * all of these will have been set to the correct values
+         */
+        conf->ext_session_cache.memcache_name = prev->ext_session_cache.memcache_name;
+        conf->ext_session_cache.memcache_host = prev->ext_session_cache.memcache_host;
+        conf->ext_session_cache.memcache_port = prev->ext_session_cache.memcache_port;
+    }
 
     if (ngx_ssl_session_cache(&conf->ssl, &ngx_http_ssl_sess_id_ctx,
                               conf->builtin_session_cache,
@@ -519,7 +532,7 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_http_ssl_srv_conf_t *sscf = conf;
 
     size_t       len;
-    ngx_str_t   *value, name, size;
+    ngx_str_t   *value, shm_name, shm_size;
     ngx_int_t    n;
     ngx_uint_t   i, j;
 
@@ -577,13 +590,13 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                 goto invalid;
             }
 
-            name.len = len;
-            name.data = value[i].data + sizeof("shared:") - 1;
+            shm_name.len = len;
+            shm_name.data = value[i].data + sizeof("shared:") - 1;
 
-            size.len = value[i].len - j - 1;
-            size.data = name.data + len + 1;
+            shm_size.len = value[i].len - j - 1;
+            shm_size.data = shm_name.data + len + 1;
 
-            n = ngx_parse_size(&size);
+            n = ngx_parse_size(&shm_size);
 
             if (n == NGX_ERROR) {
                 goto invalid;
@@ -598,12 +611,74 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             }
 
             sscf->ext_session_cache.shm_zone =
-                    ngx_shared_memory_add(cf, &name, n,
+                    ngx_shared_memory_add(cf, &shm_name, n,
                                           &ngx_http_ssl_module);
             if (sscf->ext_session_cache.shm_zone == NULL) {
                 return NGX_CONF_ERROR;
             }
 
+            continue;
+        }
+
+        if (value[i].len > sizeof("memcached:") - 1
+            && ngx_strncmp(value[i].data, "memcached:", sizeof("memcached:") - 1)
+               == 0)
+        {
+            /* total_len is the current offset into the value[i] string as a
+             * whole; len is the length of the current element */
+            size_t total_len = sizeof("memcached:") - 1;
+            len = 0;
+
+            for (j = total_len; j < value[i].len; j++) {
+                total_len++;
+                if (value[i].data[j] == ':') {
+                    value[i].data[j] = '\0';
+                    break;
+                }
+
+                len++;
+            }
+
+            if (len == 0) {
+                goto invalid;
+            }
+
+            sscf->ext_session_cache.memcache_name.len = len;
+            sscf->ext_session_cache.memcache_name.data = value[i].data + sizeof("memcached:") - 1;
+            
+            ngx_log_error_core(NGX_LOG_DEBUG, cf->log, 0,
+                           "memcache_name parsed as %V",
+                           &sscf->ext_session_cache.memcache_name);
+            
+            if (value[i].len > total_len) {
+                /* We have a host */
+                len = 0;
+                for (j = total_len; j < value[i].len; j++) {
+                    total_len++;
+                    if (value[i].data[j] == ':') {
+                        value[i].data[j] = '\0';
+                        break;
+                    }
+                    len++;
+                }
+                
+                sscf->ext_session_cache.memcache_host.len = len;
+                sscf->ext_session_cache.memcache_host.data = value[i].data + total_len - len - 1;
+
+                ngx_log_error_core(NGX_LOG_DEBUG, cf->log, 0,
+                               "memcache_host parsed as %V",
+                               &sscf->ext_session_cache.memcache_host);
+            }
+            
+            if (value[i].len > total_len) {
+                /* Wow, we even have a port */
+                sscf->ext_session_cache.memcache_port = ngx_atoi(value[i].data + total_len, value[i].len - total_len);
+
+                ngx_log_error_core(NGX_LOG_DEBUG, cf->log, 0,
+                               "memcache_port parsed as %i",
+                               sscf->ext_session_cache.memcache_port);
+            }
+            
             continue;
         }
 

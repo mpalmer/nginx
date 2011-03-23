@@ -1,0 +1,18 @@
+This is a patched version of nginx, intended to allow the use of memcached
+as an SSL session cache store.  It's use is simple; in addition to the
+existing options for ssl_session_cache (builtin:<size> and
+shared:<name>:<size>), this patch adds support for
+the form "memcached:<name>[:<host>[:port]]", where <name> is a prefix that
+will be applied to all SSL session IDs in the memcached store, <host> is the
+hostname of the memcached server (default is localhost), and <port> is the
+port of the memcached server (default is 11211).
+
+Once you've done that, you should be able to see <name>:<sessionID> keys in
+the memcached store corresponding to all of the cached SSL sessions.  Usual
+memcached practices apply.
+
+One note of caution: memcached's internal key expiry mechanism will be used
+to expire SSL sessions, using the value of ssl_session_timeout to set the
+expiry time.  This is usually fine, but if you don't see your session IDs in
+there, make sure that you're not waiting too long to look for them.
+

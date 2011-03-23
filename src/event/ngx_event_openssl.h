@@ -51,6 +51,9 @@ typedef struct {
 
 typedef struct {
     ngx_shm_zone_t  *shm_zone;
+    ngx_str_t        memcache_name;
+    ngx_str_t        memcache_host;
+    ngx_int_t        memcache_port;
 } ngx_ssl_session_cache_cfg_t;
 
 
