@@ -483,6 +483,7 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
         conf->ext_session_cache.shm_zone = prev->ext_session_cache.shm_zone;
     }
     
+#ifdef MEMCACHE_SSL_SESSION_STORE
     if (conf->ext_session_cache.memcache_name.len == 0) {
         /* None of these can have been set without memcache_name being set to
          * something, and if memcache_name has been set to something, then
@@ -492,6 +493,7 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
         conf->ext_session_cache.memcache_host = prev->ext_session_cache.memcache_host;
         conf->ext_session_cache.memcache_port = prev->ext_session_cache.memcache_port;
     }
+#endif
 
     if (ngx_ssl_session_cache(&conf->ssl, &ngx_http_ssl_sess_id_ctx,
                               conf->builtin_session_cache,
@@ -620,6 +622,7 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;
         }
 
+#ifdef MEMCACHE_SSL_SESSION_STORE
         if (value[i].len > sizeof("memcached:") - 1
             && ngx_strncmp(value[i].data, "memcached:", sizeof("memcached:") - 1)
                == 0)
@@ -681,6 +684,7 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             
             continue;
         }
+#endif
 
         goto invalid;
     }
