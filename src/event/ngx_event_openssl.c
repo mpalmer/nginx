@@ -1680,21 +1680,21 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_conn, ngx_ssl_session_t *sess)
     if (sc_cfg->memcache_name.len > 0) {
         int         rv, port;
         ngx_str_t   sess_key;
-        u_char      port_buf[6];
+        char        port_buf[10];
         char       *host;
         
         host = sc_cfg->memcache_host.len == 0
                 ? "localhost"
                 : (char *)sc_cfg->memcache_host.data;
 	port = sc_cfg->memcache_port == 0 ? 11211 : sc_cfg->memcache_port;
+	snprintf(port_buf, 9, "%i", sc_cfg->memcache_port);
         
-        rv = mc_server_add(mc, host,
-             (char *)ngx_snprintf(port_buf, 6, "%i", sc_cfg->memcache_port));
+        rv = mc_server_add(mc, host, port_buf);
         
         if (rv != 0) {
             ngx_log_error(NGX_LOG_ALERT, c->log, 0,
-                          "mc_server_add(mc, %s, %i) failed: %i",
-                          host, port, rv);
+                          "mc_server_add(mc, %s, %s) failed: %i",
+                          host, port_buf, rv);
             goto mc_cleanup;
         }
         
@@ -1777,6 +1777,10 @@ ngx_ssl_get_cached_session(ngx_ssl_conn_t *ssl_conn, u_char *id, int len,
     ngx_ssl_sess_id_t            *sess_id;
     ngx_ssl_session_cache_t      *cache;
     u_char                        buf[NGX_SSL_MAX_SESSION_SIZE];
+#ifdef MEMCACHE_SSL_SESSION_STORE
+    struct memcache              *mc = mc_new();
+#endif
+
 
     c = ngx_ssl_get_connection(ssl_conn);
     sess = NULL;
@@ -1857,12 +1861,71 @@ ngx_ssl_get_cached_session(ngx_ssl_conn_t *ssl_conn, u_char *id, int len,
         }
     }
 
-    /* TODO: Lookup key in memcache if configured */
+#ifdef MEMCACHE_SSL_SESSION_STORE
+    if (sc_cfg->memcache_name.len > 0) {
+        int         rv, port;
+        size_t      returned_sess_len;
+        ngx_str_t   sess_key;
+        char      port_buf[10];
+        char       *host, *returned_sess;
+        
+        host = sc_cfg->memcache_host.len == 0
+                ? "localhost"
+                : (char *)sc_cfg->memcache_host.data;
+	port = sc_cfg->memcache_port == 0 ? 11211 : sc_cfg->memcache_port;
+	snprintf(port_buf, 9, "%i", sc_cfg->memcache_port);
+        
+        rv = mc_server_add(mc, host, port_buf);
+        
+        if (rv != 0) {
+            ngx_log_error(NGX_LOG_ALERT, c->log, 0,
+                          "mc_server_add(mc, %s, %s) failed: %i",
+                          host, port_buf, rv);
+            goto done;
+        }
+        
+        sess_key.len = sc_cfg->memcache_name.len
+                       + 1         /* ':' */
+                       + len * 2;  /* up to 32 bytes, as hex (2 chars per
+	                            * byte) */
+        sess_key.data = ngx_palloc(c->pool, sess_key.len + 1);
+        ngx_snprintf(sess_key.data, sess_key.len, "%V:",
+                     &sc_cfg->memcache_name);
+        
+        ngx_hex_dump(sess_key.data + sc_cfg->memcache_name.len + 1,
+                     id, len);
+        
+        ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                       "Retrieving SSL session from memcache with key %V",
+                       &sess_key);
+
+        returned_sess = mc_aget2(mc, (char *)sess_key.data, sess_key.len,
+                                 &returned_sess_len);
+        
+        if (returned_sess != NULL) {
+            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                           "Session retrieved from memcache");
+            sess = d2i_SSL_SESSION(NULL, (const u_char **)&returned_sess, returned_sess_len);
+
+            if (sess == NULL) {
+                ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                               "Session decoding failed");
+            }
+        }
+        
+        goto done;
+    }
+#endif
+
 done:
 
     if (shpool) {
         ngx_shmtx_unlock(&shpool->mutex);
     }
+
+#ifdef MEMCACHE_SSL_SESSION_STORE
+    mc_free(mc);
+#endif
 
     return sess;
 }
