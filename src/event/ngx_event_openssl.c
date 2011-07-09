@@ -1673,8 +1673,6 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_conn, ngx_ssl_session_t *sess)
 
         ngx_rbtree_insert(&cache->session_rbtree, &sess_id->node);
 
-        ngx_shmtx_unlock(&shpool->mutex);
-        
         /* A short leap... */
         goto shm_done;
 
@@ -1682,7 +1680,6 @@ shm_failed:
         ngx_log_error(NGX_LOG_ALERT, c->log, 0,
                       "could not add new SSL session to the SHM session cache");
 
-shm_done:
         if (cached_sess) {
             ngx_slab_free_locked(shpool, cached_sess);
         }
@@ -1691,6 +1688,7 @@ shm_done:
             ngx_slab_free_locked(shpool, sess_id);
         }
 
+shm_done:
         ngx_shmtx_unlock(&shpool->mutex);
     }
     
