@@ -2105,6 +2105,11 @@ ngx_ssl_memcache_init(struct memcache **mc, ngx_str_t *cfg_host, ngx_int_t cfg_p
     char  *host;
     
     *mc = mc_new();
+    if (*mc == NULL)
+      return -1;
+
+    // 50ms timeout
+    mc_timeout(*mc, 0, 50000);
 
     host = cfg_host->len == 0
             ? "localhost"
