@@ -656,20 +656,23 @@ ngx_http_ssl_session_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
                 /* We have a host */
                 len = 0;
                 for (j = total_len; j < value[i].len; j++) {
-                    total_len++;
                     if (value[i].data[j] == ':') {
                         value[i].data[j] = '\0';
                         break;
                     }
+                    total_len++;
                     len++;
                 }
                 
                 sscf->ext_session_cache.memcache_host.len = len;
-                sscf->ext_session_cache.memcache_host.data = value[i].data + total_len - len - 1;
+                sscf->ext_session_cache.memcache_host.data = value[i].data + total_len - len;
 
                 ngx_log_error_core(NGX_LOG_DEBUG, cf->log, 0,
-                               "memcache_host parsed as %V",
-                               &sscf->ext_session_cache.memcache_host);
+                               "memcache_host parsed as %V (%d)",
+                               &sscf->ext_session_cache.memcache_host, len);
+
+                /* Skip over ':' */
+                total_len++;
             }
             
             if (value[i].len > total_len) {
