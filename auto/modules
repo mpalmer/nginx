@@ -269,7 +269,7 @@ if [ $HTTP_SSL = YES ]; then
     HTTP_SRCS="$HTTP_SRCS $HTTP_SSL_SRCS"
     
     if [ "$MEMCACHE_SSL_SESSION_STORE" = YES ]; then
-        USE_LIBMEMCACHE=YES
+        USE_LIBMEMCACHED=YES
     fi
 fi
 

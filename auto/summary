@@ -73,10 +73,10 @@ case $NGX_LIBATOMIC in
     *)     echo "  + using libatomic_ops library: $NGX_LIBATOMIC" ;;
 esac
 
-case $LIBMEMCACHE in
-    YES)   echo "  + using system libmemcache" ;;
+case $LIBMEMCACHED in
+    YES)   echo "  + using system libmemcached" ;;
     NONE)  ;; # not used
-    *)     echo "  + using libmemcache: $LIBMEMCACHE" ;;
+    *)     echo "  + using libmemcached: $LIBMEMCACHED" ;;
 esac
 
 echo
