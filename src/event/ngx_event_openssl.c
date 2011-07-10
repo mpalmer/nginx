@@ -5,12 +5,13 @@
 
 
 #include <ngx_config.h>
-#include <ngx_core.h>
-#include <ngx_event.h>
 
 #ifdef MEMCACHE_SSL_SESSION_STORE
-#include <memcache.h>
+#include <libmemcached/memcached.h>
 #endif
+
+#include <ngx_core.h>
+#include <ngx_event.h>
 
 typedef struct {
     ngx_uint_t  engine;   /* unsigned  engine:1; */
@@ -46,7 +47,7 @@ static char *ngx_openssl_engine(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static void ngx_openssl_exit(ngx_cycle_t *cycle);
 
 #ifdef MEMCACHE_SSL_SESSION_STORE
-static ngx_int_t ngx_ssl_memcache_init(struct memcache **mc, ngx_str_t *host, ngx_int_t port);
+static memcached_return ngx_ssl_memcache_init(memcached_st *mc, ngx_str_t *host, ngx_int_t port);
 #endif
 
 static ngx_command_t  ngx_openssl_commands[] = {
@@ -1694,20 +1695,20 @@ shm_done:
     
 #ifdef MEMCACHE_SSL_SESSION_STORE
     if (sc_cfg->memcache_name.len > 0) {
-        int               rv;
         ngx_str_t         sess_key;
-        struct memcache  *mc = NULL;
-        
+        memcached_st      mc;
+        memcached_return  rv;
+
         rv = ngx_ssl_memcache_init(&mc,
                                    &sc_cfg->memcache_host,
                                    sc_cfg->memcache_port);
-        
-        if (rv != 0) {
+
+        if (rv != MEMCACHED_SUCCESS) {
             ngx_log_error(NGX_LOG_ALERT, c->log, 0,
-                          "mc_server_add() failed: %i", rv);
+                          "ngx_ssl_memcache_init() failed: %s", memcached_strerror(&mc, rv));
             goto memcache_done;
         }
-        
+
         sess_key.len = sc_cfg->memcache_name.len
                        + 1                             /* ':' */
                        + sess->session_id_length * 2;  /* up to 32 bytes, as
@@ -1716,30 +1717,28 @@ shm_done:
         sess_key.data = ngx_palloc(c->pool, sess_key.len + 1);
         ngx_snprintf(sess_key.data, sess_key.len, "%V:",
                      &sc_cfg->memcache_name);
-        
+
         ngx_hex_dump(sess_key.data + sc_cfg->memcache_name.len + 1,
                      sess->session_id,
                      sess->session_id_length);
-        
+
         ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
                        "Storing SSL session with in memcache with key %V",
                        &sess_key);
-                       
-        rv = mc_set(mc,
-                    (char *)sess_key.data, sess_key.len,
-                    buf, len,
-                    time(NULL) + SSL_CTX_get_timeout(ssl_ctx), 0);
-        
-        if (rv != 0) {
+
+        rv = memcached_set(&mc,
+                           (char *)sess_key.data, sess_key.len,
+                           (const char *)buf, len,
+                           time(NULL) + SSL_CTX_get_timeout(ssl_ctx), 0);
+
+        if (rv != MEMCACHED_SUCCESS) {
             ngx_log_error(NGX_LOG_ALERT, c->log, 0,
-                "mc_set() failed: %i", rv);
+                "memcached_set() failed: %s", memcached_strerror(&mc, rv));
             goto memcache_done;
         }
-        
+
 memcache_done:
-        if (mc) {
-            mc_free(mc);
-        }
+        memcached_free(&mc);
     }
 #endif
 
@@ -1858,19 +1857,20 @@ shm_done:
 
 #ifdef MEMCACHE_SSL_SESSION_STORE
     if (sc_cfg->memcache_name.len > 0) {
-        int               rv;
         size_t            returned_sess_len;
         ngx_str_t         sess_key;
-        char             *returned_sess;
-        struct memcache  *mc = NULL;
+        char              *returned_sess = NULL;
+        uint32_t          flags;
+        memcached_st      mc;
+        memcached_return  rv;
 
         rv = ngx_ssl_memcache_init(&mc,
                                    &sc_cfg->memcache_host,
                                    sc_cfg->memcache_port);
 
-        if (rv != 0) {
+        if (rv != MEMCACHED_SUCCESS) {
             ngx_log_error(NGX_LOG_ALERT, c->log, 0,
-                          "mc_server_add() failed: %i", rv);
+                          "ngx_ssl_memcache_init() failed: %s", memcached_strerror(&mc, rv));
             goto memcache_done;
         }
         
@@ -1889,9 +1889,15 @@ shm_done:
                        "Retrieving SSL session from memcache with key %V",
                        &sess_key);
 
-        returned_sess = mc_aget2(mc, (char *)sess_key.data, sess_key.len,
-                                 &returned_sess_len);
+        returned_sess = memcached_get(&mc, (char *)sess_key.data, sess_key.len,
+                                      &returned_sess_len, &flags, &rv);
         
+        if (rv != MEMCACHED_SUCCESS) {
+            ngx_log_error(NGX_LOG_ALERT, c->log, 0,
+                          "memcached_get() failed: %s", memcached_strerror(&mc, rv));
+            /* Fall through */
+        }
+
         if (returned_sess != NULL) {
             ngx_log_debug3(NGX_LOG_DEBUG_EVENT, c->log, 0,
                            "Session retrieved from memcache");
@@ -1904,9 +1910,7 @@ shm_done:
         }
 
 memcache_done:
-        if (mc) {
-            mc_free(mc);
-        }
+        memcached_free(&mc);
         if (sess) {
             return sess;
         }
@@ -2013,15 +2017,15 @@ shm_done:
 
 #ifdef MEMCACHE_SSL_SESSION_STORE
     if (sc_cfg->memcache_name.len > 0) {
-        int               rv;
         ngx_str_t         sess_key;
-        struct memcache  *mc = NULL;
+        memcached_st      mc;
+        memcached_return  rv;
 
         rv = ngx_ssl_memcache_init(&mc,
                                    &sc_cfg->memcache_host,
                                    sc_cfg->memcache_port);
 
-        if (rv != 0) {
+        if (rv != MEMCACHED_SUCCESS) {
             goto memcache_done;
         }
         
@@ -2039,12 +2043,12 @@ shm_done:
         ngx_hex_dump(sess_key.data + sc_cfg->memcache_name.len + 1,
                      sess->session_id, sess->session_id_length);
         
-        mc_delete(mc, (char *)sess_key.data, sess_key.len, 0);
+        rv = memcached_delete(&mc, (char *)sess_key.data, sess_key.len, 0);
         free(sess_key.data);
         ngx_str_null(&sess_key);
         
 memcache_done:
-        mc_free(mc);
+        memcached_free(&mc);
     }
 #endif
 
@@ -2092,30 +2096,33 @@ ngx_ssl_expire_sessions(ngx_ssl_session_cache_t *cache,
 
 
 #ifdef MEMCACHE_SSL_SESSION_STORE
-/* Initialise a +struct memcache+ with the values given in +host+ and +port+
- * Returns 0 if successful, and the error value from mc_server_add() otherwise
+/* Initialise a +memcached_st+ with the values given in +host+ and +port+
+ * Returns MEMCACHED_SUCCESS if successful, and the error value from memcached_server_add() otherwise
  */
-static ngx_int_t
-ngx_ssl_memcache_init(struct memcache **mc, ngx_str_t *cfg_host, ngx_int_t cfg_port)
+static memcached_return
+ngx_ssl_memcache_init(memcached_st *mc, ngx_str_t *cfg_host, ngx_int_t cfg_port)
 {
     int    port;
-    char   port_buf[10];
     char  *host;
-    
-    *mc = mc_new();
-    if (*mc == NULL)
-      return -1;
+
+    memcached_create(mc);
+
+    // Connection settings.
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL, 1);
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_NO_BLOCK, 1);
 
     // 50ms timeout
-    mc_timeout(*mc, 0, 50000);
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_CONNECT_TIMEOUT, 50);
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_POLL_TIMEOUT, 50);
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_SND_TIMEOUT, 50000);
+    memcached_behavior_set(mc, MEMCACHED_BEHAVIOR_RCV_TIMEOUT, 50000);
 
     host = cfg_host->len == 0
             ? "localhost"
             : (char *)cfg_host->data;
     port = cfg_port == 0 ? 11211 : cfg_port;
-    snprintf(port_buf, 9, "%i", port);
 
-    return mc_server_add(*mc, host, port_buf);
+    return memcached_server_add(mc, host, port);
 }
 #endif
 
