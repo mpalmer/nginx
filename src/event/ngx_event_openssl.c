@@ -1728,7 +1728,7 @@ shm_done:
         rv = mc_set(mc,
                     (char *)sess_key.data, sess_key.len,
                     buf, len,
-                    SSL_CTX_get_timeout(ssl_ctx), 0);
+                    time(NULL) + SSL_CTX_get_timeout(ssl_ctx), 0);
         
         if (rv != 0) {
             ngx_log_error(NGX_LOG_ALERT, c->log, 0,
