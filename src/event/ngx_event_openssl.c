@@ -1492,10 +1492,16 @@ ngx_ssl_session_cache(ngx_ssl_t *ssl, ngx_str_t *sess_ctx,
 
         ngx_log_error_core(NGX_LOG_NOTICE, ssl->log, 0,
                       "Using an external SSL session cache");
-        
+
         SSL_CTX_sess_set_new_cb(ssl->ctx, ngx_ssl_new_session);
         SSL_CTX_sess_set_get_cb(ssl->ctx, ngx_ssl_get_cached_session);
         SSL_CTX_sess_set_remove_cb(ssl->ctx, ngx_ssl_remove_session);
+
+        /* TLS Session Tickets use a random encryption key which is different
+         * per server. Clients will attempt to use this instead of server-side
+         * sessions, defeating the purpose of caching sessions in the first place.
+         */
+        SSL_CTX_set_options(ssl->ctx, SSL_OP_NO_TICKET);
 
         if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_session_cache_index, sc_cfg)
             == 0)
