@@ -1,0 +1,28 @@
+
+# Copyright (C) Matt Palmer
+
+ngx_feature="libmemcached"
+ngx_feature_name="MEMCACHE_SSL_SESSION_STORE"
+ngx_feature_run=no
+ngx_feature_incs="#include <libmemcached/memcached.h>"
+ngx_feature_path=
+ngx_feature_libs="-lmemcached"
+ngx_feature_test="memcached_create(NULL)"
+. auto/feature
+
+if [ $ngx_found = yes ]; then
+    CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+    LIBMEMCACHED=YES
+fi
+
+if [ "$LIBMEMCACHED" = NONE ]; then
+
+    cat << END
+
+$0: error: SSL session cache requires libmemcached.
+You can either disable the module, or install the libmemcached library
+into the system.
+
+END
+        exit 1
+fi

@@ -1,7 +1,7 @@
 This is a patched version of nginx, intended to allow the use of memcached
 as an SSL session cache store.  It's use is simple:
 
-* Install the libmemcache (*not* libmemcached) library, including
+* Install the libmemcached (*not* libmemcache) library, including
   development headers and symlinks, to somewhere system-reachable
 
 * Configure/build/install nginx with the --with-memcache-ssl-session-store
